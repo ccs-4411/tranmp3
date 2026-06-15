@@ -4,11 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>字幕專用 - 網頁版語音極致壓縮工具</title>
+    
+    <script src="coi-serviceworker.js"></script>
+    
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    
     <style>
         body {
-            font-family: 'Microsoft JhengHei', sans-serif;
-            background-color: #f4f7f6;
+            font-family: 'Helvetica Neue', Helvetica, Arial, 'Microsoft JhengHei', sans-serif;
+            background-color: #f5f7fb;
             color: #333;
             display: flex;
             justify-content: center;
@@ -17,45 +21,73 @@
             margin: 0;
         }
         .container {
-            background-color: #fff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            background-color: #ffffff;
+            padding: 40px 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
             text-align: center;
             max-width: 500px;
-            width: 100%;
+            width: 90%;
         }
-        h1 { color: #2c3e50; font-size: 24px; margin-bottom: 10px; }
-        p { color: #7f8c8d; font-size: 14px; margin-bottom: 25px; }
+        h1 { 
+            color: #1e293b; 
+            font-size: 24px; 
+            margin-top: 0;
+            margin-bottom: 12px; 
+        }
+        p { 
+            color: #64748b; 
+            font-size: 14px; 
+            line-height: 1.6;
+            margin-bottom: 30px; 
+        }
         .file-input-label {
             display: inline-block;
-            padding: 12px 24px;
-            background-color: #3498db;
+            padding: 14px 28px;
+            background-color: #2563eb;
             color: white;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
-            font-weight: bold;
-            transition: background 0.3s;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
         }
-        .file-input-label:hover { background-color: #2980b9; }
+        .file-input-label:hover { 
+            background-color: #1d4ed8; 
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.3);
+        }
+        .file-input-label:active {
+            transform: translateY(1px);
+        }
         input[type="file"] { display: none; }
-        #status { margin-top: 20px; font-weight: bold; color: #16a085; }
+        
+        #status { 
+            margin-top: 25px; 
+            font-weight: 600; 
+            color: #0f172a;
+            font-size: 15px;
+            min-height: 22px;
+        }
+        
+        /* 進度條樣式 */
         .progress-bar {
             width: 100%;
-            background-color: #e0e0e0;
-            padding: 3px;
-            border-radius: 5px;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,.2);
-            margin-top: 20px;
+            background-color: #e2e8f0;
+            padding: 4px;
+            border-radius: 9999px;
+            margin-top: 25px;
             display: none;
+            box-sizing: border-box;
         }
         .progress-bar-fill {
             display: block;
-            height: 15px;
-            background-color: #2ecc71;
-            border-radius: 4px;
+            height: 12px;
+            background-color: #10b981;
+            border-radius: 9999px;
             width: 0%;
-            transition: width 0.1s ease-in-out;
+            transition: width 0.1s linear;
         }
     </style>
 </head>
@@ -63,7 +95,7 @@
 
 <div class="container">
     <h1>🎬 語音極致壓縮工具 (網頁版)</h1>
-    <p>本地安全轉檔：影片不傳上網，直接在瀏覽器壓縮成最適合 Whisper 字幕辨識的極小 MP3 檔！</p>
+    <p>透過 WebAssembly 技術在本地安全轉檔：影片完全不傳上網（零流量、保隱私），直接利用您的瀏覽器將影片壓縮成最適合 Whisper 字幕辨識的極小 MP3 檔！</p>
     
     <label class="file-input-label">
         📁 選擇影片 / 音檔開始轉檔
@@ -79,8 +111,8 @@
 
 <script>
     const { createFFmpeg, fetchFile } = FFmpeg;
-    // 建立 FFmpeg 實例並開啟日誌
-    const ffmpeg = createFFmpeg({ log: true });
+    // 建立 FFmpeg 實例
+    const ffmpeg = createFFmpeg({ log: false });
 
     const uploader = document.getElementById('uploader');
     const status = document.getElementById('status');
@@ -89,12 +121,14 @@
 
     // 頁面初始化：載入 FFmpeg.wasm 核心
     async function init() {
-        status.innerText = '正在初始化 FFmpeg 核心 (首次載入可能需要幾秒)...';
+        status.innerText = '正在初始化 FFmpeg 核心，請稍候...';
         try {
             await ffmpeg.load();
             status.innerText = '✅ 系統就緒！請上傳檔案。';
+            status.style.color = '#10b981';
         } catch (e) {
-            status.innerText = '❌ 核心載入失敗，請確保瀏覽器支援 WebAssembly 且未開啟嚴格快取阻擋。';
+            status.innerText = '❌ 核心載入失敗，請確認是否上傳了 coi-serviceworker.js 且使用了 Chrome/Edge 瀏覽器。';
+            status.style.color = '#ef4444';
             console.error(e);
         }
     }
@@ -102,8 +136,12 @@
     // 監聽轉檔進度
     ffmpeg.setProgress(({ ratio }) => {
         const percentage = Math.round(ratio * 100);
-        progressBarFill.style.width = `${percentage}%`;
-        status.innerText = `⏳ 正在本地壓縮中... ${percentage}%`;
+        // 防呆，有時候 ratio 會超出 0~1 範圍
+        const displayPercent = Math.min(Math.max(percentage, 0), 100);
+        
+        progressBarFill.style.width = `${displayPercent}%`;
+        status.innerText = `⏳ 正在本地壓縮中... ${displayPercent}%`;
+        status.style.color = '#2563eb';
     });
 
     // 處理檔案上傳與轉檔
@@ -113,54 +151,64 @@
 
         const { name } = file;
         const inputName = 'input_' + name;
+        // 將原副檔名改為 _compressed.mp3
         const outputName = name.substring(0, name.lastIndexOf('.')) + '_compressed.mp3';
 
-        // 顯示進度條
+        // 顯示進度條並初始化狀態
         progressBar.style.display = 'block';
         progressBarFill.style.width = '0%';
-        status.innerText = '正在讀取檔案...';
+        status.innerText = '正在讀取檔案到虛擬記憶體...';
+        status.style.color = '#0f172a';
 
-        // 將檔案寫入 FFmpeg 的虛擬記憶體檔案系統
-        ffmpeg.FS('writeFile', inputName, await fetchFile(file));
+        try {
+            // 將檔案寫入 FFmpeg.wasm 的虛擬檔案系統
+            ffmpeg.FS('writeFile', inputName, await fetchFile(file));
 
-        status.innerText = '⏳ 開始進行極致語音壓縮...';
+            status.innerText = '⏳ 開始進行極致語音壓縮...';
 
-        // 執行 FFmpeg 指令：
-        // -vn: 拿掉影片
-        // -ac 1: 轉單聲道
-        // -ar 16000: 降採樣率至 16kHz
-        // -b:a 64k: 位元率降至 64kbps
-        await ffmpeg.run(
-            '-i', inputName,
-            '-vn',
-            '-ac', '1',
-            '-ar', '16000',
-            '-acodec', 'libmp3lame',
-            '-b:a', '64k',
-            outputName
-        );
+            // 執行 FFmpeg 極致壓縮指令：
+            // -vn: 移除影片軌
+            // -ac 1: 轉單聲道 (檔案大小直接減半)
+            // -ar 16000: 降採樣率至 16000Hz (Faster-Whisper 最合適的輸入)
+            // -b:a 64k: 位元率降至 64kbps (純人聲足夠清晰)
+            await ffmpeg.run(
+                '-i', inputName,
+                '-vn',
+                '-ac', '1',
+                '-ar', '16000',
+                '-acodec', 'libmp3lame',
+                '-b:a', '64k',
+                outputName
+            );
 
-        status.innerText = '🎉 壓縮完成！正在準備下載...';
+            status.innerText = '🎉 壓縮完成！正在準備下載...';
+            status.style.color = '#10b981';
 
-        // 從虛擬檔案系統讀出壓縮後的 MP3 數據
-        const data = ffmpeg.FS('readFile', outputName);
+            // 從虛擬檔案系統中讀出壓縮後的 MP3 二進位數據
+            const data = ffmpeg.FS('readFile', outputName);
 
-        // 建立下載連結並自動觸發下載
-        const blob = new Blob([data.buffer], { type: 'audio/mp3' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = outputName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+            // 建立虛擬下載連結並自動點擊
+            const blob = new Blob([data.buffer], { type: 'audio/mp3' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = outputName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
 
-        // 清理記憶體空間
-        ffmpeg.FS('unlink', inputName);
-        ffmpeg.FS('unlink', outputName);
-        
-        status.innerText = `✅ 轉檔成功！已下載：${outputName}`;
-        uploader.value = ''; // 重設上傳鈕
+            // 釋放虛擬檔案系統記憶體，避免瀏覽器當機
+            ffmpeg.FS('unlink', inputName);
+            ffmpeg.FS('unlink', outputName);
+            
+            status.innerText = `✅ 轉檔成功！已自動下載音檔。`;
+        } catch (error) {
+            status.innerText = '❌ 轉檔過程中發生錯誤，可能此檔案格式不支援。';
+            status.style.color = '#ef4444';
+            console.error(error);
+        } finally {
+            uploader.value = ''; // 清空上傳欄位，方便下次操作
+        }
     });
 
     // 啟動初始化
